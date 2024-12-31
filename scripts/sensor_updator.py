@@ -1,5 +1,6 @@
 import logging
 import os
+import json
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 
@@ -17,6 +18,11 @@ class SensorUpdator:
         self.base_url = HASS_URL[:-1] if HASS_URL.endswith("/") else HASS_URL
         self.token = HASS_TOKEN
         self.RECHARGE_NOTIFY = os.getenv("RECHARGE_NOTIFY", "false").lower() == "true"
+        self.RECHARGE_NOTIFY_WEBHOOK = os.getenv("RECHARGE_NOTIFY_WEBHOOK", "false").lower() == "true"
+        self.RECHARGE_NOTIFY_WEBHOOK_URL = os.getenv("RECHARGE_NOTIFY_WEBHOOK_URL", "")
+        self.RECHARGE_NOTIFY_WEBHOOK_METHOD = os.getenv("RECHARGE_NOTIFY_WEBHOOK_METHOD", "GET")
+        self.RECHARGE_NOTIFY_WEBHOOK_HEADERS = os.getenv("RECHARGE_NOTIFY_WEBHOOK_HEADERS", "")
+        self.RECHARGE_NOTIFY_WEBHOOK_BODY = os.getenv("RECHARGE_NOTIFY_WEBHOOK_BODY", "")
 
     def update_one_userid(self, user_id: str, balance: float, last_daily_date: str, last_daily_usage: float, yearly_charge: float, yearly_usage: float, month_charge: float, month_usage: float):
         postfix = f"_{user_id[-4:]}"
@@ -144,6 +150,18 @@ class SensorUpdator:
                     logging.info(
                         f"The current balance of user id {user_id} is {balance} CNY less than {BALANCE} CNY, notice has been sent, please pay attention to check and recharge."
                     )
+                if self.RECHARGE_NOTIFY_WEBHOOK:
+                    try:
+                        url = self.RECHARGE_NOTIFY_WEBHOOK_URL.replace("[[user_id]]", user_id).replace("[[balance]]", str(balance))
+                        headers = json.loads(self.RECHARGE_NOTIFY_WEBHOOK_HEADERS)
+                        if self.RECHARGE_NOTIFY_WEBHOOK_METHOD == "POST":
+                            body = self.RECHARGE_NOTIFY_WEBHOOK_BODY.replace("[[user_id]]", user_id).replace("[[balance]]", str(balance))
+                            requests.post(url, headers=headers, data=body)
+                        else:
+                            requests.get(url, headers=headers)
+                        logging.info(f"Notification sent to webhook: {url}")
+                    except Exception as e:
+                        logging.error(f"Failed to send notification to webhook: {e}")
         else :
             logging.info(
             f"Check the electricity bill balance, the notification will be sent = {self.RECHARGE_NOTIFY}")
